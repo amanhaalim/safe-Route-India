@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SafeRoute / India — Risk-Aware Navigation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#060c15;overflow:hidden}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:#1a2d45;border-radius:2px}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+@keyframes barFill{from{width:0}to{width:var(--w)}}
+@keyframes ringDraw{from{stroke-dasharray:0 226}to{stroke-dasharray:var(--dash) 226}}
+@keyframes shimmer{0%{opacity:0.4}100%{opacity:1}}
+
+#app{display:flex;height:100vh;color:#e2e8f0;font-family:'Space Grotesk',sans-serif;overflow:hidden}
+
+/* === SIDEBAR === */
+#sidebar{width:340px;background:#0a1422;border-right:1px solid #111d2e;display:flex;flex-direction:column;flex-shrink:0;height:100vh}
+#header{padding:14px 16px;background:linear-gradient(135deg,#0d2040,#091628);border-bottom:1px solid #111d2e;flex-shrink:0}
+.logo-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.logo-icon{width:32px;height:32px;background:linear-gradient(135deg,#0ea5e9,#0369a1);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;box-shadow:0 0 20px rgba(14,165,233,0.5)}
+.logo-title{font-size:14px;font-weight:700;color:#0ea5e9;font-family:'JetBrains Mono',monospace}
+.logo-sub{font-size:10px;color:#334155;margin-top:1px}
+.badges{display:flex;gap:6px}
+.badge{background:rgba(0,0,0,0.4);border-radius:5px;padding:3px 8px;border:1px solid rgba(255,255,255,0.04)}
+.badge-key{font-size:8px;color:#334155;font-family:'JetBrains Mono',monospace;letter-spacing:1px}
+.badge-val{font-size:11px;font-family:'JetBrains Mono',monospace;font-weight:700}
+
+#query-panel{padding:14px;border-bottom:1px solid #111d2e;flex-shrink:0}
+.section-label{font-size:9px;color:#334155;font-family:'JetBrains Mono',monospace;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px}
+.input-wrap{position:relative;margin-bottom:8px}
+.input-icon{position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:12px;pointer-events:none}
+input,select{width:100%;padding:8px 10px 8px 28px;background:#0d1828;border:1px solid #1a2d45;color:#cbd5e1;border-radius:6px;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color 0.2s}
+input:focus,select:focus{border-color:#1e4d7a}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+#compute-btn{width:100%;padding:11px;border:none;border-radius:8px;cursor:pointer;background:linear-gradient(135deg,#0ea5e9,#0284c7);color:#fff;font-size:13px;font-weight:600;font-family:'Space Grotesk',sans-serif;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 18px rgba(14,165,233,0.35);transition:all 0.2s}
+#compute-btn:disabled{cursor:not-allowed;background:#0d2040;box-shadow:none}
+#compute-btn .spinner{width:14px;height:14px;border:2px solid #1e3a5f;border-top-color:#0ea5e9;border-radius:50%;animation:spin 0.7s linear infinite}
+
+#tabs{display:flex;border-bottom:1px solid #111d2e;flex-shrink:0}
+.tab{flex:1;padding:10px 4px;border:none;background:transparent;border-bottom:2px solid transparent;color:#2a3d52;cursor:default;display:flex;flex-direction:column;align-items:center;gap:2px;transition:all 0.2s;font-family:'JetBrains Mono',monospace}
+.tab.active{border-bottom-color:var(--tc)}
+.tab .tab-icon{font-size:18px}
+.tab .tab-label{font-size:9px;text-transform:uppercase;letter-spacing:1px}
+
+#results{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:11px}
+
+.route-header{padding:10px 13px;border-radius:8px;border:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;gap:10px;animation:fadeIn 0.3s ease}
+.route-header .rh-icon{font-size:22px}
+.route-header .rh-name{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700}
+.route-header .rh-sub{font-size:10px;color:#475569;margin-top:1px}
+
+.ring-wrap{display:flex;justify-content:center;padding:4px 0 8px}
+
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.stat-card{background:#0a1828;border:1px solid #111d2e;border-radius:7px;padding:9px 11px}
+.stat-card .sk{font-size:8px;color:#334155;text-transform:uppercase;letter-spacing:1px;font-family:'JetBrains Mono',monospace}
+.stat-card .sv{font-size:18px;font-weight:700;margin-top:3px;font-family:'JetBrains Mono',monospace;line-height:1.2}
+.stat-card .sv.small{font-size:11px}
+
+.risk-box{background:#0a1828;border:1px solid #111d2e;border-radius:8px;padding:12px}
+.risk-row{margin-bottom:9px}
+.risk-row:last-child{margin-bottom:0}
+.risk-row-top{display:flex;justify-content:space-between;margin-bottom:4px}
+.risk-label{font-size:11px;color:#94a3b8}
+.risk-pct{font-size:11px;font-family:'JetBrains Mono',monospace;font-weight:700}
+.bar-track{height:5px;background:rgba(255,255,255,0.07);border-radius:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:3px;width:0;transition:width 0.8s cubic-bezier(.4,0,.2,1)}
+
+.seg-box{background:#0a1828;border:1px solid #111d2e;border-radius:8px;padding:12px}
+.seg-bar{height:9px;border-radius:5px;overflow:hidden;display:flex;gap:1px;margin-bottom:8px}
+.seg-bar-part{min-width:2px;transition:width 0.5s ease}
+.seg-legend{display:flex;gap:12px}
+.seg-legend-item{display:flex;align-items:center;gap:4px;font-size:10px;color:#475569}
+.seg-legend-dot{width:8px;height:8px;border-radius:2px}
+.seg-total{margin-left:auto;font-size:10px;color:#2d4058;font-family:'JetBrains Mono',monospace}
+
+.hover-detail{background:#0a1828;border-radius:8px;padding:11px;animation:fadeIn 0.15s ease}
+.hover-detail .hd-label{font-size:8px;color:#334155;font-family:'JetBrains Mono',monospace;letter-spacing:2px;text-transform:uppercase;margin-bottom:7px}
+.hover-detail .hd-name{font-size:11px;font-weight:700;margin-bottom:8px}
+.hd-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.hd-cell{background:#060c14;border-radius:5px;padding:5px 7px;text-align:center}
+.hd-cell .hd-ck{font-size:8px;color:#334155;font-family:'JetBrains Mono',monospace;margin-bottom:2px}
+.hd-cell .hd-cv{font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace}
+
+.advice-box{background:rgba(255,255,255,0.02);border:1px solid #111d2e;border-radius:7px;padding:9px 12px;font-size:11px;color:#475569;line-height:1.7}
+
+.empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;opacity:0.3;text-align:center}
+.empty-state .es-icon{font-size:42px}
+.empty-state .es-text{font-size:12px;color:#475569;line-height:1.6}
+
+.loading-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.big-spinner{width:38px;height:38px;border:3px solid #111d2e;border-top-color:#0ea5e9;border-radius:50%;animation:spin 0.8s linear infinite}
+.loading-text{font-family:'JetBrains Mono',monospace;font-size:10px;color:#334155;letter-spacing:2px;text-transform:uppercase}
+
+/* === MAP PANEL === */
+#map-panel{flex:1;position:relative;overflow:hidden;background:#05090f}
+#map-svg{width:100%;height:100%;display:block}
+.map-overlay{position:absolute;z-index:10}
+#live-badge{top:14px;left:14px;background:rgba(14,165,233,0.1);border:1px solid rgba(14,165,233,0.2);border-radius:6px;padding:4px 9px;font-family:'JetBrains Mono',monospace;font-size:9px;color:#0ea5e9;letter-spacing:1.5px;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+#live-dot{width:5px;height:5px;border-radius:50%;background:#22c55e;animation:pulse 2s infinite}
+#legend-box{top:14px;right:14px;background:rgba(10,18,30,0.94);border:1px solid #111d2e;border-radius:8px;padding:10px 13px}
+.legend-title{font-family:'JetBrains Mono',monospace;font-size:8px;color:#334155;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px}
+.legend-item{display:flex;align-items:center;gap:7px;margin-bottom:5px;color:#475569;font-size:10px}
+.legend-item:last-child{margin-bottom:0}
+.legend-swatch{width:22px;height:4px;border-radius:2px}
+#tooltip-bar{bottom:56px;left:50%;transform:translateX(-50%);background:rgba(10,18,30,0.97);border-radius:8px;padding:7px 14px;font-size:11px;white-space:nowrap;animation:fadeIn 0.1s ease;display:none}
+#bottom-bar{bottom:0;left:0;right:0;background:rgba(8,14,22,0.97);border-top:1px solid #111d2e;padding:9px 20px;display:flex;gap:6px;align-items:center}
+.compare-label{font-size:8px;color:#2d4058;font-family:'JetBrains Mono',monospace;letter-spacing:2px;text-transform:uppercase;flex-shrink:0;margin-right:6px}
+.compare-item{display:flex;gap:8px;align-items:center;cursor:pointer;padding:5px 10px;border-radius:7px;border:1px solid transparent;background:transparent;opacity:0.5;transition:all 0.2s;flex:1}
+.compare-item.active{opacity:1}
+.compare-item .ci-icon{font-size:15px}
+.compare-item .ci-name{font-family:'JetBrains Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:1px}
+.compare-item .ci-stats{font-size:10px;color:#64748b}
+.compare-hint{font-size:9px;color:#1e3a5f;font-family:'JetBrains Mono',monospace;flex-shrink:0}
+
+#map-loading{position:absolute;inset:0;background:rgba(5,9,15,0.88);backdrop-filter:blur(4px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:20}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <div id="header">
+      <div class="logo-row">
+        <div class="logo-icon">🛡</div>
+        <div>
+          <div class="logo-title">SafeRoute / India</div>
+          <div class="logo-sub">Risk-Aware Navigation · Chennai</div>
+        </div>
+      </div>
+      <div class="badges">
+        <div class="badge"><div class="badge-key">CITY</div><div class="badge-val" style="color:#0ea5e9">Chennai</div></div>
+        <div class="badge"><div class="badge-key">HOUR</div><div class="badge-val" id="badge-hour" style="color:#f59e0b">21:00</div></div>
+        <div class="badge"><div class="badge-key">STATUS</div><div class="badge-val" style="color:#22c55e">LIVE</div></div>
+      </div>
+    </div>
+
+    <div id="query-panel">
+      <div class="section-label">Route Query</div>
+      <div class="input-wrap"><span class="input-icon">🟢</span><input readonly value="Chennai Central Railway Station"/></div>
+      <div class="input-wrap"><span class="input-icon">🔴</span><input readonly value="T. Nagar, Chennai"/></div>
+      <div class="grid2">
+        <div class="input-wrap"><span class="input-icon">🕐</span><input id="hour-input" type="number" min="0" max="23" value="21"/></div>
+        <div class="input-wrap"><span class="input-icon">👤</span>
+          <select>
+            <option>Default</option><option>Women's Safety</option><option>Cyclist</option><option>Night Mode</option>
+          </select>
+        </div>
+      </div>
+      <button id="compute-btn"><span>⚡</span> Compute Safe Routes</button>
+    </div>
+
+    <div id="tabs">
+      <button class="tab" data-route="safest" style="--tc:#22c55e">
+        <span class="tab-icon">🟢</span><span class="tab-label">SAFEST</span>
+      </button>
+      <button class="tab" data-route="balanced" style="--tc:#f59e0b">
+        <span class="tab-icon">🟡</span><span class="tab-label">BALANCED</span>
+      </button>
+      <button class="tab" data-route="fastest" style="--tc:#ef4444">
+        <span class="tab-icon">🔴</span><span class="tab-label">FASTEST</span>
+      </button>
+    </div>
+
+    <div id="results">
+      <div class="empty-state">
+        <div class="es-icon">🗺️</div>
+        <div class="es-text">Click <strong>Compute Safe Routes</strong><br/>to analyse risk across 3 strategies</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div id="map-panel">
+    <svg id="map-svg" viewBox="0 0 800 640" preserveAspectRatio="xMidYMid meet"></svg>
+
+    <div id="live-badge" class="map-overlay">
+      <div id="live-dot"></div>Live Simulation
+    </div>
+
+    <div id="legend-box" class="map-overlay" style="display:none">
+      <div class="legend-title">Risk Level</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#16a34a"></div>Very Safe (&lt;20%)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#22c55e"></div>Safe (20–35%)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#f59e0b"></div>Moderate (35–50%)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#ef4444"></div>High (50–65%)</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#991b1b"></div>Critical (&gt;65%)</div>
+    </div>
+
+    <div id="tooltip-bar" class="map-overlay"></div>
+
+    <div id="bottom-bar" class="map-overlay" style="display:none">
+      <div class="compare-label">Compare</div>
+      <div class="compare-item" data-route="safest">
+        <span class="ci-icon">🟢</span>
+        <div><div class="ci-name" style="color:#22c55e">SAFEST</div><div class="ci-stats">6.12km · 28min · <span style="color:#22c55e">78.2%</span></div></div>
+      </div>
+      <div class="compare-item" data-route="balanced">
+        <span class="ci-icon">🟡</span>
+        <div><div class="ci-name" style="color:#f59e0b">BALANCED</div><div class="ci-stats">5.97km · 22min · <span style="color:#f59e0b">66.6%</span></div></div>
+      </div>
+      <div class="compare-item" data-route="fastest">
+        <span class="ci-icon">🔴</span>
+        <div><div class="ci-name" style="color:#ef4444">FASTEST</div><div class="ci-stats">5.78km · 17min · <span style="color:#ef4444">35.1%</span></div></div>
+      </div>
+      <div class="compare-hint">hover dots for detail</div>
+    </div>
+
+    <div id="map-loading" style="display:none">
+      <div class="big-spinner"></div>
+      <div class="loading-text">Analysing Risk Vectors…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = {
+  safest: {
+    color:"#22c55e", dimColor:"#14532d", label:"SAFEST", icon:"🟢",
+    subtitle:"Via Anna Salai · Lowest crime & accident exposure",
+    pts:[[262,82],[292,127],[312,177],[322,232],[318,287],[307,345],[297,402],[285,513],[262,612]],
+    segments:[
+      {label:"Anna Salai",risk:0.18,crime:0.18,acc:0.08,flood:0.06,color:"#16a34a"},
+      {label:"Nungambakkam Rd",risk:0.22,crime:0.16,acc:0.11,flood:0.10,color:"#16a34a"},
+      {label:"Kodambakkam Rd",risk:0.19,crime:0.18,acc:0.09,flood:0.05,color:"#16a34a"},
+      {label:"Venkatnarayana Rd",risk:0.25,crime:0.23,acc:0.13,flood:0.08,color:"#22c55e"},
+      {label:"Usman Rd",risk:0.20,crime:0.15,acc:0.15,flood:0.10,color:"#16a34a"},
+      {label:"G.N. Chetty Rd",risk:0.28,crime:0.28,acc:0.16,flood:0.11,color:"#22c55e"},
+      {label:"Thyagaraya Rd",risk:0.21,crime:0.16,acc:0.19,flood:0.07,color:"#16a34a"},
+      {label:"Pondy Bazaar Link",risk:0.24,crime:0.20,acc:0.15,flood:0.09,color:"#16a34a"},
+    ],
+    summary:{dist:6.12,mins:28,safety:78.2,avgRisk:0.218,crime:0.196,acc:0.152,flood:0.087,road:0.312,total:10,high:0,med:3,low:7,label:"Safe",lc:"#22c55e"}
+  },
+  balanced: {
+    color:"#f59e0b", dimColor:"#78350f", label:"BALANCED", icon:"🟡",
+    subtitle:"Via Chamiers Rd · Speed-safety trade-off",
+    pts:[[262,82],[288,126],[303,174],[309,224],[300,279],[291,333],[282,389],[274,519],[255,612]],
+    segments:[
+      {label:"Poonamallee High Rd",risk:0.22,crime:0.19,acc:0.15,flood:0.11,color:"#16a34a"},
+      {label:"Greams Rd",risk:0.35,crime:0.30,acc:0.22,flood:0.13,color:"#22c55e"},
+      {label:"Cenotaph Rd",risk:0.28,crime:0.26,acc:0.16,flood:0.13,color:"#22c55e"},
+      {label:"Chamiers Rd",risk:0.40,crime:0.36,acc:0.26,flood:0.19,color:"#f59e0b"},
+      {label:"TTK Rd",risk:0.32,crime:0.31,acc:0.26,flood:0.15,color:"#22c55e"},
+      {label:"Kasturi Ranga Rd",risk:0.38,crime:0.37,acc:0.30,flood:0.15,color:"#22c55e"},
+      {label:"Habibullah Rd",risk:0.42,crime:0.35,acc:0.29,flood:0.19,color:"#f59e0b"},
+    ],
+    summary:{dist:5.97,mins:22,safety:66.6,avgRisk:0.334,crime:0.301,acc:0.234,flood:0.134,road:0.421,total:8,high:1,med:4,low:3,label:"Moderate Risk",lc:"#f59e0b"}
+  },
+  fastest: {
+    color:"#ef4444", dimColor:"#7f1d1d", label:"FASTEST", icon:"🔴",
+    subtitle:"Via Triplicane · Shortest but highest risk",
+    pts:[[262,82],[282,130],[294,181],[297,235],[291,292],[284,350],[277,407],[268,524],[248,612]],
+    segments:[
+      {label:"Triplicane High Rd",risk:0.55,crime:0.52,acc:0.42,flood:0.20,color:"#ef4444"},
+      {label:"South Beach Rd",risk:0.68,crime:0.64,acc:0.47,flood:0.25,color:"#ef4444"},
+      {label:"Angappa Naicken St",risk:0.72,crime:0.66,acc:0.50,flood:0.27,color:"#991b1b"},
+      {label:"Mint St (Night zone)",risk:0.61,crime:0.57,acc:0.39,flood:0.27,color:"#ef4444"},
+      {label:"Linghi Chetty St",risk:0.75,crime:0.70,acc:0.51,flood:0.29,color:"#991b1b"},
+      {label:"Govindappa Naicken St",risk:0.58,crime:0.52,acc:0.45,flood:0.26,color:"#ef4444"},
+      {label:"Kutchery Rd",risk:0.70,crime:0.68,acc:0.52,flood:0.28,color:"#991b1b"},
+    ],
+    summary:{dist:5.78,mins:17,safety:35.1,avgRisk:0.649,crime:0.584,acc:0.454,flood:0.260,road:0.612,total:8,high:5,med:2,low:1,label:"High Risk",lc:"#ef4444"}
+  }
+};
+
+// State
+let state = { active:'safest', ready:false, loading:false, hov:null };
+
+// DOM refs
+const resultsEl = document.getElementById('results');
+const computeBtn = document.getElementById('compute-btn');
+const hourInput = document.getElementById('hour-input');
+const mapSvg = document.getElementById('map-svg');
+const legendBox = document.getElementById('legend-box');
+const bottomBar = document.getElementById('bottom-bar');
+const tooltipBar = document.getElementById('tooltip-bar');
+const mapLoading = document.getElementById('map-loading');
+const badgeHour = document.getElementById('badge-hour');
+const tabs = document.querySelectorAll('.tab');
+
+hourInput.addEventListener('change', () => {
+  badgeHour.textContent = String(hourInput.value).padStart(2,'0') + ':00';
+});
+
+// ---- COMPUTE ----
+function compute() {
+  if (state.loading) return;
+  state.loading = true; state.ready = false; state.hov = null;
+  computeBtn.disabled = true;
+  computeBtn.innerHTML = '<div class="spinner"></div> Analysing…';
+  showLoadingResults();
+  showMapLoading(true);
+  setTimeout(() => {
+    state.loading = false; state.ready = true; state.active = 'safest';
+    computeBtn.disabled = false;
+    computeBtn.innerHTML = '<span>⚡</span> Compute Safe Routes';
+    showMapLoading(false);
+    drawMap();
+    updateTabs();
+    renderResults();
+    legendBox.style.display = '';
+    bottomBar.style.display = '';
+    updateCompareBar();
+  }, 1400);
+}
+
+// ---- TABS ----
+function updateTabs() {
+  tabs.forEach(t => {
+    const isA = t.dataset.route === state.active;
+    t.classList.toggle('active', isA);
+    const r = DATA[t.dataset.route];
+    t.style.color = isA ? r.color : '';
+  });
+}
+
+tabs.forEach(t => {
+  t.addEventListener('click', () => {
+    if (!state.ready) return;
+    state.active = t.dataset.route;
+    state.hov = null;
+    updateTabs();
+    drawMap();
+    renderResults();
+    updateCompareBar();
+  });
+});
+
+// ---- COMPARE BAR ----
+function updateCompareBar() {
+  document.querySelectorAll('.compare-item').forEach(el => {
+    const isA = el.dataset.route === state.active;
+    el.classList.toggle('active', isA);
+    const r = DATA[el.dataset.route];
+    el.style.borderColor = isA ? r.color+'40' : 'transparent';
+    el.style.background = isA ? r.color+'0d' : 'transparent';
+  });
+}
+document.querySelectorAll('.compare-item').forEach(el => {
+  el.addEventListener('click', () => {
+    if (!state.ready) return;
+    state.active = el.dataset.route;
+    state.hov = null;
+    updateTabs();
+    drawMap();
+    renderResults();
+    updateCompareBar();
+  });
+});
+
+// ---- MAP DRAWING ----
+function svgEl(tag, attrs) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k,v);
+  return el;
+}
+function svgText(el, txt) { el.textContent = txt; return el; }
+
+function drawMap() {
+  mapSvg.innerHTML = '';
+  const W=800, H=640;
+
+  // Defs
+  const defs = svgEl('defs',{});
+  const grad = svgEl('radialGradient',{id:'rbg',cx:'50%',cy:'50%',r:'70%'});
+  const s1=svgEl('stop',{offset:'0%'}); s1.setAttribute('stop-color','#0c1e35');
+  const s2=svgEl('stop',{offset:'100%'}); s2.setAttribute('stop-color','#060d18');
+  grad.appendChild(s1); grad.appendChild(s2); defs.appendChild(grad);
+  const gf = svgEl('filter',{id:'gf'});
+  const gb = svgEl('feGaussianBlur',{stdDeviation:'3',result:'b'});
+  const fm = svgEl('feMerge',{});
+  const fn1=svgEl('feMergeNode',{in:'b'}); const fn2=svgEl('feMergeNode',{in:'SourceGraphic'});
+  fm.appendChild(fn1); fm.appendChild(fn2); gf.appendChild(gb); gf.appendChild(fm);
+  defs.appendChild(gf); mapSvg.appendChild(defs);
+
+  // Background
+  const bg = svgEl('rect',{x:80,y:30,width:680,height:595,fill:'url(#rbg)',rx:8});
+  mapSvg.appendChild(bg);
+
+  // Grid
+  for (let x=140;x<=760;x+=80) {
+    const l=svgEl('line',{x1:x,y1:30,x2:x,y2:625,stroke:'#0c1d30',strokeWidth:'0.8'});
+    mapSvg.appendChild(l);
+  }
+  for (let y=90;y<=590;y+=90) {
+    const l=svgEl('line',{x1:80,y1:y,x2:760,y2:y,stroke:'#0c1d30',strokeWidth:'0.8'});
+    mapSvg.appendChild(l);
+  }
+
+  // Background road lines
+  const bgRoads = [
+    {d:'M130 130 Q400 110 660 135',w:6},
+    {d:'M130 270 L400 258 L670 275',w:6},
+    {d:'M130 420 Q400 405 660 425',w:6},
+    {d:'M130 555 L400 545 L670 558',w:6},
+    {d:'M200 35 L195 625',w:3},
+    {d:'M320 35 Q310 300 330 625',w:3},
+    {d:'M450 35 L440 625',w:3},
+    {d:'M580 35 L570 625',w:3},
+    {d:'M680 35 L675 625',w:3},
+  ];
+  bgRoads.forEach(r => {
+    const p=svgEl('path',{d:r.d,fill:'none',stroke:'#0d2035',strokeWidth:r.w});
+    mapSvg.appendChild(p);
+  });
+
+  // Labels
+  const labels=[
+    ['Egmore',420,165],['Nungambakkam',218,255],['Mylapore',490,375],
+    ['Kodambakkam',218,400],['Alwarpet',430,490],['Teynampet',295,510]
+  ];
+  labels.forEach(([t,x,y]) => {
+    const tx=svgEl('text',{x,y,fontSize:11,fill:'#122538',fontFamily:'JetBrains Mono',textAnchor:'middle'});
+    svgText(tx,t); mapSvg.appendChild(tx);
+  });
+
+  const ORDER = ['fastest','balanced','safest'];
+
+  // Draw all routes (dim non-active)
+  ORDER.forEach(name => {
+    const rt = DATA[name], isA = name===state.active;
+    const pts = rt.pts.map(([x,y])=>`${x},${y}`).join(' ');
+    if (isA) {
+      const glow=svgEl('polyline',{points:pts,fill:'none',stroke:rt.color,strokeWidth:18,strokeLinecap:'round',strokeLinejoin:'round',opacity:0.12});
+      mapSvg.appendChild(glow);
+    }
+    const line=svgEl('polyline',{points:pts,fill:'none',stroke:isA?rt.color:rt.dimColor,
+      strokeWidth:isA?7:2.5,strokeLinecap:'round',strokeLinejoin:'round',opacity:isA?1:0.3});
+    mapSvg.appendChild(line);
+  });
+
+  // Segment dots for active route
+  const ar = DATA[state.active];
+  ar.pts.forEach(([x,y],i) => {
+    if (i===0||i===ar.pts.length-1) return;
+    const seg=ar.segments[i-1]; if(!seg) return;
+    const isH=state.hov===i;
+    const c=svgEl('circle',{cx:x,cy:y,r:isH?11:7,fill:seg.color,
+      stroke:isH?'#fff':'rgba(0,0,0,0.5)',strokeWidth:isH?2:1,
+      style:'cursor:pointer;transition:r 0.12s',filter:isH?'url(#gf)':''});
+    c.addEventListener('mouseenter',()=>{ state.hov=i; drawMap(); renderHoverDetail(i); showTooltip(i); });
+    c.addEventListener('mouseleave',()=>{ state.hov=null; drawMap(); renderHoverDetail(null); tooltipBar.style.display='none'; });
+    mapSvg.appendChild(c);
+  });
+
+  // A/B markers
+  const A=ar.pts[0], B=ar.pts[ar.pts.length-1];
+  [[A,'#1d4ed8','#60a5fa','A','Chennai Central'],[B,'#dc2626','#f87171','B','T. Nagar']].forEach(([pt,fill,stroke,letter,name],idx)=>{
+    const [px,py]=pt;
+    const c=svgEl('circle',{cx:px,cy:py,r:13,fill,stroke,strokeWidth:2,filter:'url(#gf)'});
+    mapSvg.appendChild(c);
+    const t=svgEl('text',{x:px,y:py+4,textAnchor:'middle',fontSize:11,fill:'#fff',fontWeight:'bold',fontFamily:'JetBrains Mono'});
+    svgText(t,letter); mapSvg.appendChild(t);
+    const nt=svgEl('text',{x:px+(idx===0?18:-18),y:py+(idx===0?-4:4),fontSize:10,fill:stroke,fontFamily:'JetBrains Mono',textAnchor:idx===0?'start':'end'});
+    svgText(nt,name); mapSvg.appendChild(nt);
+  });
+
+  // Border & compass
+  const border=svgEl('rect',{x:80,y:30,width:680,height:595,fill:'none',stroke:'#1a2d45',strokeWidth:1,rx:8});
+  mapSvg.appendChild(border);
+  const compass=svgEl('text',{x:740,y:60,fontSize:10,fill:'#1a3550',fontFamily:'JetBrains Mono'});
+  svgText(compass,'N↑'); mapSvg.appendChild(compass);
+  const scaleLine=svgEl('line',{x1:95,y1:613,x2:155,y2:613,stroke:'#1a3550',strokeWidth:2});
+  mapSvg.appendChild(scaleLine);
+  ['0','1km'].forEach((t,i)=>{
+    const st=svgEl('text',{x:i===0?95:148,y:626,fontSize:9,fill:'#1a3550',fontFamily:'JetBrains Mono'});
+    svgText(st,t); mapSvg.appendChild(st);
+  });
+}
+
+function showTooltip(i) {
+  const rt=DATA[state.active];
+  const seg=rt.segments[i-1]; if(!seg) return;
+  tooltipBar.style.display='block';
+  tooltipBar.style.borderColor=seg.color+'60';
+  tooltipBar.innerHTML=`<span style="font-family:'JetBrains Mono',monospace;color:#475569;font-size:10px">${state.active.toUpperCase()}</span> · <span style="color:${seg.color};font-weight:700">${Math.round(seg.risk*100)}% risk</span> · <strong style="color:#cbd5e1">${seg.label}</strong>&nbsp;&nbsp;<span style="color:#ef4444">🔴${Math.round(seg.crime*100)}%</span> <span style="color:#f97316">🟠${Math.round(seg.acc*100)}%</span> <span style="color:#3b82f6">🔵${Math.round(seg.flood*100)}%</span>`;
+}
+
+function showMapLoading(show) {
+  mapLoading.style.display = show ? '' : 'none';
+}
+
+// ---- RESULTS ----
+function showLoadingResults() {
+  resultsEl.innerHTML = `<div class="loading-state"><div class="big-spinner"></div><div class="loading-text">Analysing Risk Vectors…</div></div>`;
+}
+
+function renderResults() {
+  const rt = DATA[state.active];
+  const s = rt.summary;
+  resultsEl.innerHTML = '';
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-direction:column;gap:11px;animation:fadeIn 0.3s ease';
+
+  // Route header
+  wrap.insertAdjacentHTML('beforeend',`
+    <div class="route-header" style="background:${rt.color}08;border-color:${rt.color}30">
+      <span class="rh-icon">${rt.icon}</span>
+      <div><div class="rh-name" style="color:${rt.color}">${rt.label} ROUTE</div><div class="rh-sub">${rt.subtitle}</div></div>
+    </div>`);
+
+  // Safety ring
+  const ringWrap = document.createElement('div');
+  ringWrap.className='ring-wrap';
+  ringWrap.innerHTML = buildRing(s.safety, s.lc);
+  wrap.appendChild(ringWrap);
+
+  // Stat cards
+  wrap.insertAdjacentHTML('beforeend',`
+    <div class="stat-grid">
+      <div class="stat-card"><div class="sk">Distance</div><div class="sv" style="color:${rt.color}">${s.dist} km</div></div>
+      <div class="stat-card"><div class="sk">Est. Time</div><div class="sv" style="color:${rt.color}">${s.mins} min</div></div>
+      <div class="stat-card"><div class="sk">Avg Risk</div><div class="sv" style="color:${s.lc}">${Math.round(s.avgRisk*100)}%</div></div>
+      <div class="stat-card"><div class="sk">Level</div><div class="sv small" style="color:${s.lc}">${s.label}</div></div>
+    </div>`);
+
+  // Risk breakdown
+  const riskBox = document.createElement('div');
+  riskBox.className='risk-box';
+  riskBox.innerHTML=`<div class="section-label" style="margin-bottom:10px">Risk Factor Breakdown</div>`;
+  const risks=[['🔴 Crime',s.crime,'#ef4444',0],['🟠 Accident',s.acc,'#f97316',80],['🔵 Flood',s.flood,'#3b82f6',160],['🟣 Road Type',s.road,'#a78bfa',240]];
+  risks.forEach(([lbl,val,col,delay])=>{
+    const row=document.createElement('div'); row.className='risk-row';
+    row.innerHTML=`<div class="risk-row-top"><span class="risk-label">${lbl}</span><span class="risk-pct" style="color:${col}">${Math.round(val*100)}%</span></div><div class="bar-track"><div class="bar-fill" style="background:${col}" data-target="${Math.round(val*100)}"></div></div>`;
+    riskBox.appendChild(row);
+  });
+  wrap.appendChild(riskBox);
+
+  // Animate bars
+  setTimeout(()=>{
+    document.querySelectorAll('.bar-fill').forEach((el,i)=>{
+      setTimeout(()=>{ el.style.width=el.dataset.target+'%'; },i*80);
+    });
+  },50);
+
+  // Segment distribution
+  const lowW=Math.round(100*s.low/s.total), medW=Math.round(100*s.med/s.total), highW=Math.round(100*s.high/s.total);
+  wrap.insertAdjacentHTML('beforeend',`
+    <div class="seg-box">
+      <div class="section-label" style="margin-bottom:8px">Segment Distribution</div>
+      <div class="seg-bar">
+        <div class="seg-bar-part" style="width:${lowW}%;background:#22c55e"></div>
+        <div class="seg-bar-part" style="width:${medW}%;background:#f59e0b"></div>
+        <div class="seg-bar-part" style="width:${highW}%;background:#ef4444"></div>
+      </div>
+      <div class="seg-legend">
+        <div class="seg-legend-item"><div class="seg-legend-dot" style="background:#22c55e"></div>Low: <span style="color:#22c55e;font-family:'JetBrains Mono',monospace;font-weight:700">${s.low}</span></div>
+        <div class="seg-legend-item"><div class="seg-legend-dot" style="background:#f59e0b"></div>Med: <span style="color:#f59e0b;font-family:'JetBrains Mono',monospace;font-weight:700">${s.med}</span></div>
+        <div class="seg-legend-item"><div class="seg-legend-dot" style="background:#ef4444"></div>High: <span style="color:#ef4444;font-family:'JetBrains Mono',monospace;font-weight:700">${s.high}</span></div>
+        <div class="seg-total">${s.total} segs</div>
+      </div>
+    </div>`);
+
+  // Hover detail placeholder
+  const hovPlaceholder = document.createElement('div');
+  hovPlaceholder.id='hov-detail';
+  wrap.appendChild(hovPlaceholder);
+
+  // Advice
+  const adviceMap = {
+    safest:`💡 <span style="color:#22c55e">+0.34 km</span> longer but <span style="color:#22c55e">43% safer</span>. All segments low–moderate. ✅ Recommended at ${hourInput.value}:00.`,
+    balanced:`💡 Saves 0.15 km vs safest. Cuts risk <span style="color:#f59e0b">31%</span> vs fastest. Watch Chamiers Rd.`,
+    fastest:`⚠ <span style="color:#ef4444">43% higher risk</span>. ${s.high} high-crime segments incl. Angappa Naicken &amp; Linghi Chetty. <strong>Not advised at night.</strong>`
+  };
+  wrap.insertAdjacentHTML('beforeend',`<div class="advice-box">${adviceMap[state.active]}</div>`);
+
+  resultsEl.appendChild(wrap);
+
+  // Animate ring after DOM insertion
+  setTimeout(()=>animateRing(s.safety, s.lc), 50);
+}
+
+function renderHoverDetail(i) {
+  const el = document.getElementById('hov-detail');
+  if (!el) return;
+  if (i===null) { el.innerHTML=''; return; }
+  const rt=DATA[state.active];
+  const seg=rt.segments[i-1]; if(!seg){el.innerHTML='';return;}
+  el.innerHTML=`<div class="hover-detail" style="border:1px solid ${seg.color}50">
+    <div class="hd-label">Segment Detail</div>
+    <div class="hd-name" style="color:${seg.color}">📍 ${seg.label}</div>
+    <div class="hd-grid">
+      <div class="hd-cell"><div class="hd-ck">Crime</div><div class="hd-cv" style="color:#ef4444">${Math.round(seg.crime*100)}%</div></div>
+      <div class="hd-cell"><div class="hd-ck">Accident</div><div class="hd-cv" style="color:#f97316">${Math.round(seg.acc*100)}%</div></div>
+      <div class="hd-cell"><div class="hd-ck">Flood</div><div class="hd-cv" style="color:#3b82f6">${Math.round(seg.flood*100)}%</div></div>
+    </div>
+  </div>`;
+}
+
+// ---- SAFETY RING ----
+function buildRing(pct, color) {
+  const r=46, circ=2*Math.PI*r;
+  return `<svg width="110" height="110" viewBox="0 0 110 110" id="safety-ring-svg" style="overflow:visible">
+    <circle cx="55" cy="55" r="${r}" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="8"/>
+    <circle cx="55" cy="55" r="${r}" fill="none" stroke="${color}" stroke-width="8"
+      id="safety-ring-arc"
+      stroke-dasharray="0 ${circ}" stroke-dashoffset="${circ/4}" stroke-linecap="round"
+      data-circ="${circ}" data-pct="${pct}"
+      style="filter:drop-shadow(0 0 8px ${color}80)"/>
+    <text x="55" y="52" text-anchor="middle" font-size="18" font-weight="700" fill="${color}" font-family="JetBrains Mono">${pct}%</text>
+    <text x="55" y="68" text-anchor="middle" font-size="9" fill="#475569" font-family="JetBrains Mono">SAFETY</text>
+  </svg>`;
+}
+
+function animateRing(pct, color) {
+  const arc = document.getElementById('safety-ring-arc');
+  if (!arc) return;
+  const circ = parseFloat(arc.dataset.circ);
+  const dash = circ * pct/100;
+  arc.style.transition='stroke-dasharray 1s cubic-bezier(.4,0,.2,1)';
+  arc.setAttribute('stroke-dasharray',`${dash} ${circ}`);
+}
+
+// ---- INIT ----
+computeBtn.addEventListener('click', compute);
+compute();
+</script>
+</body>
+</html>
