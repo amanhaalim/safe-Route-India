@@ -87,8 +87,9 @@ def load_risk_gdfs() -> dict:
                 continue
 
         df[score_col] = pd.to_numeric(df[score_col], errors="coerce").fillna(0)
-        gdf = latlon_to_gdf(df)
-        gdf["_SCORE"] = df[score_col].values[:len(gdf)]
+        # Keep score alongside lat/lon before filtering so alignment is preserved
+        df["_SCORE"] = df[score_col]
+        gdf = latlon_to_gdf(df)   # drops NaN lat/lon rows internally
         gdfs[key] = gdf
         logger.info(f"  Loaded {key}: {len(gdf)} points")
 
@@ -97,8 +98,8 @@ def load_risk_gdfs() -> dict:
     if os.path.exists(bs_path):
         bs_df = pd.read_csv(bs_path)
         if {"LAT", "LON", "BLACKSPOT_SCORE"}.issubset(bs_df.columns):
+            bs_df["_SCORE"] = bs_df["BLACKSPOT_SCORE"]
             gdfs["blackspot"] = latlon_to_gdf(bs_df)
-            gdfs["blackspot"]["_SCORE"] = bs_df["BLACKSPOT_SCORE"].values[:len(gdfs["blackspot"])]
             logger.info(f"  Loaded blackspots: {len(gdfs['blackspot'])} GPS points")
         else:
             gdfs["blackspot"] = None
@@ -255,7 +256,7 @@ def build_risk_graph(city_key: str):
     risks = [d["composite_risk"] for _, _, d in G.edges(data=True)]
     logger.info(f"  Composite risk — mean: {np.mean(risks):.3f}  "
                 f"max: {np.max(risks):.3f}  "
-                f"high (>0.55): {sum(r > 0.55 for r in risks)} edges")
+                f"high (>0.08): {sum(r > 0.08 for r in risks)} edges")
     return G
 
 
@@ -274,3 +275,4 @@ if __name__ == "__main__":
             build_risk_graph(city)
 
     main()
+    

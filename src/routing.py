@@ -76,20 +76,50 @@ def load_graph(city_key: str) -> nx.MultiDiGraph:
 
 
 def _fill_missing_edge_attributes(G: nx.MultiDiGraph) -> None:
-    """Ensure every edge has required risk attributes; fill with safe defaults."""
+    """Ensure every edge has required risk attributes; fill with safe defaults.
+    GraphML stores ALL values as strings — cast everything to float explicitly.
+    """
     D = 0.35  # default risk for unscored edges
     for u, v, key, data in G.edges(data=True, keys=True):
-        data.setdefault("crime_score",         D)
-        data.setdefault("accident_score",      D)
-        data.setdefault("flood_score",         0.20)
-        data.setdefault("road_score",          0.50)
-        data.setdefault("composite_risk",      D)
-        data.setdefault("risk_prob_high",      D)
-        data.setdefault("predicted_risk_tier", 1)
-        L = float(data.get("length", 50))
-        R = float(data.get("composite_risk", D))
-        data.setdefault("effective_weight", L * (1 + R * RISK_MULTIPLIER))
-        data.setdefault("balanced_weight",  0.5 * L + 0.5 * data["effective_weight"])
+        # Cast existing string values to float first, THEN setdefault
+        for attr, default in [
+            ("crime_score",         D),
+            ("accident_score",      D),
+            ("flood_score",         0.20),
+            ("road_score",          0.50),
+            ("composite_risk",      D),
+            ("risk_prob_high",      D),
+        ]:
+            try:
+                data[attr] = float(data[attr]) if attr in data else default
+            except (ValueError, TypeError):
+                data[attr] = default
+
+        try:
+            data["predicted_risk_tier"] = int(float(
+                data.get("predicted_risk_tier", 1)
+            ))
+        except (ValueError, TypeError):
+            data["predicted_risk_tier"] = 1
+
+        L = float(data.get("length", 50) or 50)
+        R = float(data["composite_risk"])
+
+        if "effective_weight" not in data:
+            data["effective_weight"] = L * (1.0 + R * RISK_MULTIPLIER)
+        else:
+            try:
+                data["effective_weight"] = float(data["effective_weight"])
+            except (ValueError, TypeError):
+                data["effective_weight"] = L * (1.0 + R * RISK_MULTIPLIER)
+
+        if "balanced_weight" not in data:
+            data["balanced_weight"] = 0.5 * L + 0.5 * data["effective_weight"]
+        else:
+            try:
+                data["balanced_weight"] = float(data["balanced_weight"])
+            except (ValueError, TypeError):
+                data["balanced_weight"] = 0.5 * L + 0.5 * data["effective_weight"]
 
 
 def clear_graph_cache(city_key: Optional[str] = None) -> None:
@@ -160,11 +190,20 @@ def get_time_weight_modifier(hour: int) -> float:
     return 1.0
 
 
-def apply_time_modifiers_to_graph(G: nx.MultiDiGraph, hour: int) -> None:
+def apply_time_modifiers_to_graph(
+    G: nx.MultiDiGraph,
+    hour: int,
+    profile_weights: Optional[Dict] = None,
+) -> None:
     """
     Inject time-aware weights onto every edge (in-place, at query time).
     Recalculated fresh for every route request — no graph rebuild needed.
+    profile_weights: dict with crime/accident/flood/infra keys (from SAFETY_PROFILES)
     """
+    from config import SAFETY_PROFILES
+    if profile_weights is None:
+        profile_weights = SAFETY_PROFILES["default"]
+
     hour = hour % 24
     mods = {}
     for (start, end), m in TIME_MODIFIERS.items():
@@ -174,16 +213,21 @@ def apply_time_modifiers_to_graph(G: nx.MultiDiGraph, hour: int) -> None:
     crime_mult    = mods.get("crime",    1.0)
     accident_mult = mods.get("accident", 1.0)
 
+    w_crime    = float(profile_weights.get("crime",    0.40))
+    w_accident = float(profile_weights.get("accident", 0.30))
+    w_flood    = float(profile_weights.get("flood",    0.15))
+    w_infra    = float(profile_weights.get("infra",    0.15))
+
     for u, v, key, data in G.edges(data=True, keys=True):
-        L = float(data.get("length", 50))
+        L = float(data.get("length", 50) or 50)
         time_risk = min(
-            0.40 * float(data.get("crime_score",    0.3)) * crime_mult +
-            0.30 * float(data.get("accident_score", 0.3)) * accident_mult +
-            0.15 * float(data.get("flood_score",    0.2)) +
-            0.15 * float(data.get("road_score",     0.5)),
+            w_crime    * float(data.get("crime_score",    0.3)) * crime_mult +
+            w_accident * float(data.get("accident_score", 0.3)) * accident_mult +
+            w_flood    * float(data.get("flood_score",    0.2)) +
+            w_infra    * float(data.get("road_score",     0.5)),
             1.0
         )
-        data["time_adjusted_weight"] = L * (1 + time_risk * RISK_MULTIPLIER)
+        data["time_adjusted_weight"] = L * (1.0 + time_risk * RISK_MULTIPLIER)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -351,6 +395,7 @@ def find_safe_routes(
     city_key: str,
     travel_hour: int = 12,
     include_segments: bool = False,
+    profile: str = "default",
 ) -> Tuple[Dict, Tuple[float, float], Tuple[float, float]]:
     """
     Given two text addresses in an Indian city, return three route options
@@ -362,12 +407,15 @@ def find_safe_routes(
         city_key:            e.g. "chennai"
         travel_hour:         0–23 (departure hour; affects risk weights)
         include_segments:    if True, add per-segment risk colors to response
+        profile:             safety profile key: default/women/cyclist/night
 
     Returns:
         (routes_dict, origin_coords, dest_coords)
         routes_dict keys: "safest", "balanced", "fastest"
         Each route: { coordinates, summary, [segments] }
     """
+    from config import SAFETY_PROFILES
+    profile_weights = SAFETY_PROFILES.get(profile, SAFETY_PROFILES["default"])
     city_name = TARGET_CITIES[city_key]["place"].split(",")[0].strip()
 
     G = load_graph(city_key)
@@ -383,7 +431,7 @@ def find_safe_routes(
 
     logger.info(f"Route request: {orig_node} → {dest_node} | {city_key} | hour={travel_hour}")
 
-    apply_time_modifiers_to_graph(G, travel_hour)
+    apply_time_modifiers_to_graph(G, travel_hour, profile_weights)
 
     routing_configs = [
         ("safest",   "time_adjusted_weight"),

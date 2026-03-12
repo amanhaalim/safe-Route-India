@@ -162,6 +162,16 @@ def health_check():
     }
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Suppress favicon 404."""
+    favicon_path = frontend_dir / "favicon.ico"
+    if favicon_path.exists():
+        return FileResponse(str(favicon_path))
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
 @app.get("/cities")
 def list_cities():
     """Return all supported cities with their metadata."""
@@ -191,14 +201,22 @@ def get_routes(req: RouteRequest):
     """
     t_start = time.time()
 
+    import inspect
+    routing_sig = inspect.signature(find_safe_routes)
+    routing_kwargs = dict(
+        origin_address=req.origin,
+        destination_address=req.destination,
+        city_key=req.city,
+        travel_hour=req.travel_hour or 12,
+    )
+    # Only pass profile if routing.py supports it
+    if "profile" in routing_sig.parameters:
+        routing_kwargs["profile"] = req.profile or "default"
+    if "include_segments" in routing_sig.parameters:
+        routing_kwargs["include_segments"] = True
+
     try:
-        routes, orig, dest = find_safe_routes(
-            origin_address=req.origin,
-            destination_address=req.destination,
-            city_key=req.city,
-            travel_hour=req.travel_hour or 12,
-            profile=req.profile or "default",
-        )
+        routes, orig, dest = find_safe_routes(**routing_kwargs)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except FileNotFoundError as e:

@@ -17,7 +17,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from config import (
     TARGET_CITIES, GRAPHS_DIR, MODELS_DIR,
     MODEL_FEATURES, MODEL_TARGET,
-    RISK_THRESHOLDS, RF_PARAMS,
+    RISK_THRESHOLDS, RISK_TIER_PERCENTILES, RF_PARAMS,
 )
 from src.utils import ensure_dirs, save_model, compute_risk_tier
 
@@ -73,11 +73,28 @@ def build_training_dataframe(cities: list) -> pd.DataFrame:
 
     combined = pd.concat(frames, ignore_index=True)
 
+    # ── Auto-calibrate thresholds from data percentiles ──────────────────
+    scores = combined["composite_risk"].dropna().values
+    low_pct = RISK_TIER_PERCENTILES.get("LOW",  50)
+    med_pct = RISK_TIER_PERCENTILES.get("MEDIUM", 80)
+    low_threshold = float(np.percentile(scores, low_pct))
+    med_threshold = float(np.percentile(scores, med_pct))
+
+    # Safety guard: ensure thresholds are distinct
+    if med_threshold <= low_threshold:
+        med_threshold = low_threshold + 1e-6
+
+    logger.info(
+        f"Auto-calibrated thresholds → "
+        f"LOW < {low_threshold:.5f} (p{low_pct}), "
+        f"MEDIUM < {med_threshold:.5f} (p{med_pct})"
+    )
+
     combined[MODEL_TARGET] = combined["composite_risk"].apply(
         lambda s: compute_risk_tier(
             s,
-            low_threshold=RISK_THRESHOLDS["LOW"],
-            med_threshold=RISK_THRESHOLDS["MEDIUM"],
+            low_threshold=low_threshold,
+            med_threshold=med_threshold,
         )
     )
 
@@ -92,7 +109,7 @@ def build_training_dataframe(cities: list) -> pd.DataFrame:
         + combined[MODEL_TARGET].map(class_map).value_counts().to_string()
     )
 
-    return combined
+    return combined, low_threshold, med_threshold
 
 
 # =============================================================================
@@ -213,7 +230,7 @@ def train_model(df: pd.DataFrame):
 # 3. Save artifacts
 # =============================================================================
 
-def save_artifacts(model, scaler, report, importance, cv_scores):
+def save_artifacts(model, scaler, report, importance, cv_scores, low_threshold, med_threshold):
 
     ensure_dirs(MODELS_DIR)
 
@@ -248,7 +265,10 @@ def save_artifacts(model, scaler, report, importance, cv_scores):
         "n_estimators": RF_PARAMS["n_estimators"],
         "cv_f1_mean": round(float(cv_scores.mean()), 3),
         "cv_f1_std": round(float(cv_scores.std()), 3),
-        "risk_thresholds": RISK_THRESHOLDS,
+        "risk_thresholds": {
+            "LOW":    round(low_threshold, 6),
+            "MEDIUM": round(med_threshold, 6),
+        },
     }
 
     with open(os.path.join(MODELS_DIR, "model_meta.json"), "w") as f:
@@ -277,11 +297,11 @@ def run():
 
     logger.info(f"Training on data from: {available}")
 
-    df = build_training_dataframe(available)
+    df, low_thr, med_thr = build_training_dataframe(available)
 
     model, scaler, report, importance, cv = train_model(df)
 
-    save_artifacts(model, scaler, report, importance, cv)
+    save_artifacts(model, scaler, report, importance, cv, low_thr, med_thr)
 
 
 if __name__ == "__main__":

@@ -101,35 +101,44 @@ def geocode_dataframe(df, district_col, state_col, lookup, state_lookup):
     df["_DIST"] = clean_district_name(df[district_col])
     df["_STATE"] = standardise_place_name(df[state_col])
 
-    merged = df.merge(
-        lookup,
-        on=["_DIST", "_STATE"],
-        how="left"
-    )
+    # Step 1: try exact district + state match
+    merged = df.merge(lookup, on=["_DIST", "_STATE"], how="left")
 
-    unmatched = merged["LAT"].isna().sum()
+    unmatched_mask = merged["LAT"].isna()
+    unmatched = unmatched_mask.sum()
 
     if unmatched > 0:
-
         logger.info(f"{unmatched} rows unmatched → using state centroid")
 
+        # Step 2: try state-only match via state_lookup
+        # state_lookup has columns: _STATE, STATE_LAT, STATE_LON
         merged = merged.merge(state_lookup, on="_STATE", how="left")
-
-        merged["LAT"] = merged["LAT"].fillna(merged["STATE_LAT"])
-        merged["LON"] = merged["LON"].fillna(merged["STATE_LON"])
-
+        merged.loc[unmatched_mask, "LAT"] = merged.loc[unmatched_mask, "STATE_LAT"]
+        merged.loc[unmatched_mask, "LON"] = merged.loc[unmatched_mask, "STATE_LON"]
         merged.drop(columns=["STATE_LAT", "STATE_LON"], inplace=True)
+
+    # Step 3: still unmatched → try fuzzy state name match
+    still_unmatched = merged["LAT"].isna()
+    if still_unmatched.sum() > 0:
+        logger.info(f"{still_unmatched.sum()} rows still unmatched → trying fuzzy state match")
+        all_states = state_lookup["_STATE"].str.lower().tolist()
+        for idx in merged[still_unmatched].index:
+            raw = str(merged.at[idx, "_STATE"]).lower()
+            # find closest state name by substring containment
+            match = next(
+                (s for s in all_states if raw in s or s in raw),
+                None
+            )
+            if match:
+                row = state_lookup[state_lookup["_STATE"].str.lower() == match].iloc[0]
+                merged.at[idx, "LAT"] = row["STATE_LAT"]
+                merged.at[idx, "LON"] = row["STATE_LON"]
 
     merged.drop(columns=["_DIST", "_STATE"], inplace=True)
 
-    total = len(merged)
-
+    total   = len(merged)
     matched = merged["LAT"].notna().sum()
-
-    if total > 0:
-        pct = int(100 * matched / total)
-    else:
-        pct = 0
+    pct     = int(100 * matched / total) if total > 0 else 0
 
     logger.info(f"Geocoding: {matched}/{total} rows ({pct}%)")
 

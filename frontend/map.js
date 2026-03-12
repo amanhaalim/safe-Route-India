@@ -122,8 +122,13 @@ async function populateCityDropdown() {
     const data = await res.json();
     const sel  = document.getElementById("citySelect");
 
+    // API returns { cities: { chennai: {...}, mumbai: {...} } }
+    const cityKeys = data.cities
+      ? Object.keys(data.cities)
+      : Object.keys(CITY_CENTERS);
+
     sel.innerHTML = "";
-    (data.cities || Object.keys(CITY_CENTERS)).forEach(city => {
+    cityKeys.forEach(city => {
       const opt      = document.createElement("option");
       opt.value      = city;
       opt.textContent = city.charAt(0).toUpperCase() + city.slice(1);
