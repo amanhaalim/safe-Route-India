@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>🛡️ SafeRoute India</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── Reset ───────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0c1117;
+      --bg2:     #161f2e;
+      --bg3:     #1e2d42;
+      --border:  #243447;
+      --border2: #2e4060;
+      --accent:  #3b82f6;
+      --txt:     #e2eaf6;
+      --txt2:    #8b9cbd;
+      --txt3:    #4a5e7a;
+      --safe:    #22c55e;
+      --warn:    #f59e0b;
+      --danger:  #ef4444;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      display: flex;
+      height: 100vh;
+      background: var(--bg);
+      color: var(--txt);
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────── */
+    #sidebar {
+      width: 390px;
+      min-width: 350px;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+      z-index: 20;
+      overflow: hidden;
+    }
+
+    #sidebar-header {
+      padding: 18px 20px 15px;
+      background: linear-gradient(150deg, #0d2351 0%, #0c1117 100%);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .hdr-top {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 10px;
+    }
+    .hdr-icon {
+      width: 38px; height: 38px;
+      background: var(--accent);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 19px; flex-shrink: 0;
+      box-shadow: 0 0 22px #3b82f62a;
+    }
+    .hdr-text h1 { font-size: 18px; font-weight: 700; color: #fff; letter-spacing: -.2px; }
+    .hdr-text p  { font-size: 11px; color: #7eaadd; margin-top: 2px; }
+    .hdr-badges  { display: flex; gap: 5px; }
+    .badge {
+      font-size: 10px; font-weight: 600;
+      padding: 2px 8px; border-radius: 8px; border: 1px solid;
+    }
+    .bc { color: #f87171; border-color: #f8717144; background: #f8717110; }
+    .ba { color: #fbbf24; border-color: #fbbf2444; background: #fbbf2410; }
+    .bf { color: #60a5fa; border-color: #60a5fa44; background: #60a5fa10; }
+
+    /* Body scroll */
+    #sidebar-body {
+      flex: 1; overflow-y: auto;
+      padding: 14px;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    #sidebar-body::-webkit-scrollbar { width: 4px; }
+    #sidebar-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    /* Cards */
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .card-title {
+      font-size: 10px; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--txt3); margin-bottom: 11px;
+    }
+
+    /* Inputs */
+    .iw { display: flex; flex-direction: column; gap: 4px; margin-bottom: 9px; }
+    .iw:last-of-type { margin-bottom: 0; }
+    .iw label { font-size: 11px; color: var(--txt2); }
+    .iw input, .iw select {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--txt);
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 13px; font-family: inherit;
+      outline: none; width: 100%;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .iw input:focus, .iw select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px #3b82f618;
+    }
+    .iw input::placeholder { color: var(--txt3); font-size: 12px; }
+    .ir { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .icon-wrap { position: relative; }
+    .icon-wrap input { padding-left: 30px; }
+    .icon-pfx { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); font-size: 12px; pointer-events: none; }
+
+    /* Search button */
+    #searchBtn {
+      width: 100%; padding: 11px 16px;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 9px;
+      font-size: 13px; font-weight: 700; font-family: inherit;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      transition: background .15s, box-shadow .15s, transform .1s;
+      box-shadow: 0 2px 14px #3b82f630;
+      margin-top: 11px;
+    }
+    #searchBtn:hover:not(:disabled) { background: #2563eb; box-shadow: 0 4px 20px #3b82f640; }
+    #searchBtn:active { transform: translateY(1px); }
+    #searchBtn:disabled { background: var(--bg3); color: var(--txt3); cursor: wait; box-shadow: none; }
+
+    /* Status */
+    #statusMsg {
+      font-size: 11px; min-height: 16px; margin-top: 7px;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .status       { color: var(--txt2); }
+    .status.info  { color: #60a5fa; }
+    .status.warn  { color: var(--warn); }
+    .status.ok, .status.success { color: #34d399; }
+    .status.error, .status.err  { color: #f87171; }
+
+    /* Route tabs */
+    #routeTabs { display: none; gap: 6px; }
+    .tab-btn {
+      flex: 1; padding: 9px 4px;
+      border: 1px solid var(--border);
+      background: var(--bg2); color: var(--txt2);
+      border-radius: 9px;
+      cursor: pointer; font-size: 12px; font-weight: 700; font-family: inherit;
+      text-align: center; transition: all .15s;
+    }
+    .tab-btn:hover { border-color: var(--border2); color: var(--txt); }
+    .tab-btn.active[data-route="safest"]   { background: #052e16; border-color: #22c55e99; color: var(--safe); }
+    .tab-btn.active[data-route="balanced"] { background: #431407; border-color: #f59e0b99; color: var(--warn); }
+    .tab-btn.active[data-route="fastest"]  { background: #450a0a; border-color: #ef444499; color: var(--danger); }
+
+    /* Risk panel — map.js writes HTML inside #riskPanel */
+    #riskPanel { display: none; flex-direction: column; gap: 11px; }
+
+    /* map.js inner elements — styled here so map.js needs no CSS changes */
+    .route-header { font-size: 13px; font-weight: 700; letter-spacing: .03em; }
+
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+    .stat-row {
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 8px; padding: 9px 11px;
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .stat-label { font-size: 9.5px; color: var(--txt3); text-transform: uppercase; letter-spacing: .05em; }
+    .stat-value { font-size: 15px; font-weight: 700; }
+
+    .bars-section { display: flex; flex-direction: column; gap: 7px; }
+    .risk-bar-wrap { display: flex; flex-direction: column; gap: 3px; }
+    .risk-bar-header { display: flex; justify-content: space-between; font-size: 11px; color: var(--txt2); }
+    .risk-bar-outer  { background: var(--bg3); border-radius: 4px; height: 6px; overflow: hidden; }
+    .risk-bar-inner  { height: 6px; border-radius: 4px; transition: width .55s cubic-bezier(.4,0,.2,1); }
+
+    .seg-dist { display: flex; flex-direction: column; gap: 5px; }
+    .seg-bar-wrap { display: flex; flex-direction: column; gap: 2px; }
+
+    /* Heatmap button */
+    #heatmapBtn {
+      width: 100%; padding: 9px 12px;
+      background: transparent; color: var(--txt2);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      font-size: 12px; font-weight: 600; font-family: inherit;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      transition: all .15s;
+    }
+    #heatmapBtn:hover   { border-color: var(--accent); color: #93c5fd; }
+    #heatmapBtn.active  { background: #1a3460; border-color: var(--accent); color: #93c5fd; }
+    #heatmapBtn:disabled { opacity: .5; cursor: wait; }
+
+    /* Report button */
+    #reportBtn {
+      width: 100%; padding: 9px 12px;
+      background: transparent; color: #f87171;
+      border: 1px solid #f8717133;
+      border-radius: 8px;
+      font-size: 12px; font-weight: 600; font-family: inherit;
+      cursor: pointer; transition: all .15s;
+    }
+    #reportBtn:hover { background: #f8717112; border-color: #f87171aa; }
+
+    /* ── Map ─────────────────────────────────────────── */
+    #map { flex: 1; position: relative; }
+
+    #legend {
+      position: absolute; bottom: 28px; right: 12px;
+      z-index: 800;
+      background: rgba(12,17,23,.93);
+      border: 1px solid var(--border2);
+      border-radius: 11px;
+      padding: 11px 14px;
+      font-size: 11.5px;
+      backdrop-filter: blur(10px);
+    }
+    .leg-title { font-size: 9px; font-weight: 700; color: var(--txt3); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 6px; }
+    .leg-title + .leg-title { margin-top: 9px; }
+    .leg-item { display: flex; align-items: center; gap: 8px; margin: 4px 0; color: var(--txt2); }
+    .leg-line { width: 20px; height: 5px; border-radius: 2.5px; flex-shrink: 0; }
+
+    /* Leaflet overrides */
+    .leaflet-control-zoom                  { border: 1px solid var(--border2) !important; }
+    .leaflet-control-zoom a                { background: var(--bg2) !important; color: var(--txt) !important; border-color: var(--border2) !important; }
+    .leaflet-popup-content-wrapper         { background: var(--bg2) !important; border: 1px solid var(--border2) !important; color: var(--txt) !important; border-radius: 11px !important; box-shadow: 0 6px 30px rgba(0,0,0,.6) !important; font-family: 'DM Sans', sans-serif !important; }
+    .leaflet-popup-tip                     { background: var(--bg2) !important; }
+    .leaflet-control-layers                { background: var(--bg2) !important; border: 1px solid var(--border2) !important; color: var(--txt) !important; }
+    .leaflet-control-layers label          { color: var(--txt) !important; }
+
+    @keyframes spin    { to { transform: rotate(360deg); } }
+    @keyframes pulse   { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+    .pulsing { animation: pulse 1.1s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════ SIDEBAR ════════════════════════════════════════ -->
+<div id="sidebar">
+
+  <div id="sidebar-header">
+    <div class="hdr-top">
+      <div class="hdr-icon">🛡️</div>
+      <div class="hdr-text">
+        <h1>SafeRoute India</h1>
+        <p>Risk-aware navigation — powered by OSM</p>
+      </div>
+    </div>
+    <div class="hdr-badges">
+      <span class="badge bc">Crime</span>
+      <span class="badge ba">Accidents</span>
+      <span class="badge bf">Floods</span>
+    </div>
+  </div>
+
+  <div id="sidebar-body">
+
+    <!-- Journey form -->
+    <div class="card">
+      <div class="card-title">📍 Journey Details</div>
+
+      <div class="iw">
+        <label>City</label>
+        <select id="citySelect" onchange="onCityChange()">
+          <option value="chennai">Chennai</option>
+          <option value="mumbai">Mumbai</option>
+          <option value="delhi">Delhi</option>
+          <option value="bengaluru">Bengaluru</option>
+          <option value="hyderabad">Hyderabad</option>
+        </select>
+      </div>
+
+      <div class="iw">
+        <label>Origin</label>
+        <div class="icon-wrap">
+          <span class="icon-pfx">🟢</span>
+          <input id="origin" type="text" placeholder="e.g. Chennai Central Railway Station"/>
+        </div>
+      </div>
+
+      <div class="iw">
+        <label>Destination</label>
+        <div class="icon-wrap">
+          <span class="icon-pfx">🔴</span>
+          <input id="destination" type="text" placeholder="e.g. T. Nagar Bus Stand"/>
+        </div>
+      </div>
+
+      <div class="ir">
+        <div class="iw">
+          <label>Travel Hour (0–23)</label>
+          <input id="travelHour" type="number" min="0" max="23" value="12"/>
+        </div>
+        <div class="iw">
+          <label>Safety Profile</label>
+          <select id="profileSelect">
+            <option value="default">🧑 Default</option>
+            <option value="women">👩 Women's Safety</option>
+            <option value="cyclist">🚴 Cyclist</option>
+            <option value="night">🌙 Night Mode</option>
+          </select>
+        </div>
+      </div>
+
+      <button id="searchBtn" onclick="findRoutes()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        Find Safe Route
+      </button>
+      <div id="statusMsg" class="status"></div>
+    </div>
+
+    <!-- Route tabs — shown by map.js after a successful search -->
+    <div id="routeTabs">
+      <button class="tab-btn active" data-route="safest"   onclick="activateRoute('safest')">🟢 Safest</button>
+      <button class="tab-btn"        data-route="balanced" onclick="activateRoute('balanced')">🟡 Balanced</button>
+      <button class="tab-btn"        data-route="fastest"  onclick="activateRoute('fastest')">🔴 Fastest</button>
+    </div>
+
+    <!-- Risk panel — map.js renders content into #riskPanel -->
+    <div class="card" id="riskPanelCard" style="display:none;">
+      <div id="riskPanel"></div>
+    </div>
+
+    <!-- Map layers -->
+    <div class="card">
+      <div class="card-title">🗺 Map Layers</div>
+      <button id="heatmapBtn" onclick="toggleHeatmap()">
+        🌡 Show Crime Heatmap
+      </button>
+    </div>
+
+    <!-- Incident reporting -->
+    <div class="card">
+      <div class="card-title">⚠️ Community Reports</div>
+      <button id="reportBtn" onclick="toggleReportMode()">📢 Report Incident</button>
+      <p style="font-size:10.5px; color:var(--txt3); margin-top:8px; line-height:1.6;">
+        Help improve route safety — report crime, accidents, flooding, or road damage.
+      </p>
+    </div>
+
+  </div><!-- /sidebar-body -->
+</div>
+
+<!-- ═══════════════ MAP ════════════════════════════════════════════ -->
+<div id="map">
+  <div id="legend">
+    <div class="leg-title">Routes</div>
+    <div class="leg-item"><div class="leg-line" style="background:#22c55e"></div>Safest</div>
+    <div class="leg-item"><div class="leg-line" style="background:#f59e0b"></div>Balanced</div>
+    <div class="leg-item"><div class="leg-line" style="background:#ef4444;opacity:.75"></div>Fastest</div>
+    <div class="leg-title" style="margin-top:9px">Segment Risk</div>
+    <div class="leg-item"><div class="leg-line" style="background:#22c55e"></div>Low</div>
+    <div class="leg-item"><div class="leg-line" style="background:#f59e0b"></div>Medium</div>
+    <div class="leg-item"><div class="leg-line" style="background:#ef4444"></div>High</div>
+  </div>
+</div>
+
+<!-- ═══════════════ SCRIPTS ════════════════════════════════════════ -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="map.js"></script>
+
+<script>
+  /**
+   * Bridge: map.js calls renderRiskPanel() which writes content into #riskPanel
+   * and sets panel.style.display = "block".  We watch that element and show/hide
+   * the surrounding card (#riskPanelCard) accordingly, so the card border &
+   * padding are only visible when there is content.
+   *
+   * We also patch clearAll() to hide the card when routes are cleared.
+   */
+  (function () {
+    const card  = document.getElementById('riskPanelCard');
+    const panel = document.getElementById('riskPanel');
+
+    // Show card whenever map.js puts content into #riskPanel
+    new MutationObserver(() => {
+      const hasContent = panel.innerHTML.trim().length > 0;
+      card.style.display  = hasContent ? 'block' : 'none';
+      panel.style.display = hasContent ? 'flex'  : 'none';
+    }).observe(panel, { childList: true, subtree: true });
+
+    // Patch clearAll so hiding routeTabs also hides risk card
+    const _orig = window.clearAll;
+    window.clearAll = function () {
+      _orig?.();
+      card.style.display  = 'none';
+      panel.style.display = 'none';
+    };
+  })();
+</script>
+</body>
+</html>
