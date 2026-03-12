@@ -1,0 +1,48 @@
+# SafeRoute India — .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# Data (large files — do not commit)
+data/raw/
+data/processed/
+graphs/
+models/
+
+# Logs
+logs/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Secrets
+.env
+*.env
+
+# Keep these empty dirs
+!data/raw/crime/.gitkeep
+!data/raw/accidents/.gitkeep
+!data/raw/flood/.gitkeep
+!data/raw/maps/.gitkeep
+!data/processed/.gitkeep
+!models/.gitkeep
+!graphs/.gitkeep
