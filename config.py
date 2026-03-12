@@ -142,7 +142,8 @@ MODEL_FEATURES    = ["crime_score", "accident_score", "flood_score",
                      "road_score",  "length",         "composite_risk"]
 MODEL_TARGET      = "risk_tier"
 RISK_TIERS        = {0: "LOW", 1: "MEDIUM", 2: "HIGH"}
-RISK_THRESHOLDS   = {"LOW": 0.25, "MEDIUM": 0.55}  # below LOW → 0, below MEDIUM → 1, else → 2
+RISK_THRESHOLDS       = {"LOW": 0.088, "MEDIUM": 0.093}  # auto-calibrated from data percentiles
+RISK_TIER_PERCENTILES = {"LOW": 50, "MEDIUM": 80}        # target: ~50% LOW, ~30% MEDIUM, ~20% HIGH
 
 RF_PARAMS = {
     "n_estimators":     300,
